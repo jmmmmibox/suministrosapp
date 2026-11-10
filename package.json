@@ -1,0 +1,11 @@
+{
+  "name": "suministros-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/calc.test.js",
+    "check": "for f in js/*.js sw.js; do node --check $f || exit 1; done",
+    "test:smoke": "node test/smoke.test.js"
+  }
+}
