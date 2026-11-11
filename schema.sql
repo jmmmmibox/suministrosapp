@@ -37,7 +37,7 @@ create table if not exists public.contracts (
   name             text,
   contract_number  text,
   holder           text,
-  paid_by          text not null default 'me' check (paid_by in ('me', 'tenant')), -- me | tenant
+  paid_by          text,  -- vacío = lo pago yo; si trae un nombre (p. ej. Inquilino) lo paga otra persona
   price            numeric not null default 0,
   billing_period   text not null default 'monthly', -- monthly | bimonthly | quarterly | semiannual | annual
   start_date       date,
@@ -71,7 +71,7 @@ create table if not exists public.expenses (
   concept      text not null,
   category     text not null default 'Otros',
   amount       numeric not null default 0,
-  paid_by      text not null default 'me' check (paid_by in ('me', 'tenant')), -- me | tenant
+  paid_by      text,  -- vacío = lo pago yo; si trae un nombre lo paga otra persona
   date         date not null default current_date,
   recurring    boolean not null default false,
   period       text not null default 'monthly',
@@ -123,8 +123,19 @@ create table if not exists public.documents (
 );
 
 -- ---------- Actualizaciones para bases de datos ya creadas ----------
-alter table public.contracts add column if not exists paid_by text not null default 'me' check (paid_by in ('me', 'tenant'));
-alter table public.expenses  add column if not exists paid_by text not null default 'me' check (paid_by in ('me', 'tenant'));
+alter table public.contracts add column if not exists paid_by text;
+alter table public.expenses  add column if not exists paid_by text;
+-- por si se ejecutó una versión anterior con valores fijos (me / tenant)
+alter table public.contracts drop constraint if exists contracts_paid_by_check;
+alter table public.expenses  drop constraint if exists expenses_paid_by_check;
+alter table public.contracts alter column paid_by drop not null;
+alter table public.expenses  alter column paid_by drop not null;
+alter table public.contracts alter column paid_by drop default;
+alter table public.expenses  alter column paid_by drop default;
+update public.contracts set paid_by = null where paid_by = 'me';
+update public.expenses  set paid_by = null where paid_by = 'me';
+update public.contracts set paid_by = 'Inquilino' where paid_by = 'tenant';
+update public.expenses  set paid_by = 'Inquilino' where paid_by = 'tenant';
 
 -- ---------- Índices ----------
 create index if not exists idx_contracts_property   on public.contracts(property_id);

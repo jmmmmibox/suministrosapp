@@ -21,7 +21,7 @@ tables.properties = [
 tables.contracts = [
   { id: 'c1', property_id: 'p1', category: 'Luz', provider: 'Iberdrola', price: 55, billing_period: 'monthly', status: 'active', renewal_date: iso(10), notice_days: 30, created_at: '2024-01-01' },
   { id: 'c2', property_id: 'p2', category: 'Internet', provider: 'Movistar', price: 40, billing_period: 'monthly', status: 'active', permanence_end: iso(-5), notice_days: 30, created_at: '2026-01-01' },
-  { id: 'c4', property_id: 'p2', category: 'Agua', provider: 'Emasesa', price: 25, billing_period: 'monthly', status: 'active', paid_by: 'tenant', created_at: '2026-01-01' },
+  { id: 'c4', property_id: 'p2', category: 'Agua', provider: 'Emasesa', price: 25, billing_period: 'monthly', status: 'active', paid_by: 'Inquilino', created_at: '2026-01-01' },
   { id: 'c3', property_id: null, category: 'Streaming', provider: 'Netflix', price: 120, billing_period: 'annual', status: 'cancelled', created_at: '2026-01-01' },
 ];
 tables.expenses = [{ id: 'e1', property_id: 'p1', category: 'Comunidad', concept: 'Comunidad', amount: 90, period: 'quarterly', recurring: true, date: '2026-01-01', created_at: '2026-01-01' }];
@@ -62,11 +62,11 @@ assert.match(text(), /Movistar/); assert.doesNotMatch(text(), /Iberdrola/);
 
 // Contrato pagado por el inquilino: aparece etiquetado y no suma al gasto
 location.hash = '#/contratos'; await wait();
-assert.match(text(), /Emasesa/); assert.match(text(), /Lo paga el inquilino/);
+assert.match(text(), /Emasesa/); assert.match(text(), /Lo paga: Inquilino/);
 location.hash = '#/contrato/c4'; await wait();
-assert.match(text(), /Lo paga el inquilino/);
+assert.match(text(), /Lo paga: Inquilino/);
 location.hash = '#/propiedad/p2'; await wait();
-assert.match(text(), /Emasesa/); assert.match(text(), /Lo paga el inquilino/);
+assert.match(text(), /Emasesa/); assert.match(text(), /Lo paga: Inquilino/);
 
 // Alta de contrato por formulario
 const { contractForm } = await import('../js/forms.js');
@@ -77,7 +77,7 @@ assert.ok(form, 'formulario abierto');
 form.elements.provider.value = 'Naturgy';
 form.elements.category.value = 'Luz';
 form.elements.price.value = '33.5';
-form.elements.paid_by.value = 'tenant';
+form.elements.paid_by.value = 'Inquilino';
 form.elements.renewal_date.value = iso(200);
 form.dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
 await wait(80);
@@ -86,7 +86,7 @@ assert.ok(nuevo, 'contrato creado');
 assert.equal(nuevo.property_id, 'p1');
 assert.equal(nuevo.price, 33.5);
 assert.equal(nuevo.notice_days, 30);
-assert.equal(nuevo.paid_by, 'tenant');
+assert.equal(nuevo.paid_by, 'Inquilino');
 assert.ok(tables.price_history.some((h) => h.contract_id === nuevo.id), 'historial inicial creado');
 assert.ok(!document.querySelector('.modal'), 'modal cerrado');
 // validación: sin compañía no guarda

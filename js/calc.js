@@ -46,8 +46,9 @@ export function daysUntil(s, today = new Date()) {
 
 export const isActive = (c) => c.status !== 'cancelled';
 
-// ¿Lo pago yo? Lo que paga otra persona (p. ej. el inquilino) no cuenta como gasto mío.
-export const paidByMe = (x) => x.paid_by !== 'tenant';
+// ¿Lo pago yo? paid_by vacío = lo pago yo; si trae un nombre (p. ej. "Inquilino"), lo paga otra persona
+// y no cuenta como gasto mío.
+export const paidByMe = (x) => !x.paid_by || !String(x.paid_by).trim() || x.paid_by === 'me';
 
 export const contractMonthly = (c) => (isActive(c) && paidByMe(c) ? toMonthly(c.price, c.billing_period) : 0);
 export const contractAnnual = (c) => contractMonthly(c) * 12;
@@ -69,7 +70,7 @@ export function contractAlerts(contracts, today = new Date(), horizonDays = 120)
 
 // Contratos activos que llevan más de `months` meses sin revisarse.
 export function needsReview(c, today = new Date(), months = 12) {
-  if (!isActive(c) || !paidByMe(c)) return false;
+  if (!isActive(c)) return false; // aunque lo pague otra persona, te avisa de revisarlo
   const ref = c.last_reviewed || c.start_date || (c.created_at ? c.created_at.slice(0, 10) : null);
   const days = daysUntil(ref, today);
   if (days === null) return false;

@@ -97,14 +97,17 @@ t('CSV', () => {
 t('lo que paga el inquilino no cuenta como gasto mío', () => {
   assert.equal(paidByMe({}), true);
   assert.equal(paidByMe({ paid_by: 'me' }), true);
-  assert.equal(paidByMe({ paid_by: 'tenant' }), false);
-  const luz = { id: 'l', status: 'active', price: 80, billing_period: 'monthly', category: 'Luz', paid_by: 'tenant', last_reviewed: '2020-01-01' };
+  assert.equal(paidByMe({ paid_by: 'Inquilino' }), false);
+  assert.equal(paidByMe({ paid_by: '' }), true);
+  assert.equal(paidByMe({ paid_by: null }), true);
+  assert.equal(paidByMe({ paid_by: '  ' }), true);
+  const luz = { id: 'l', status: 'active', price: 80, billing_period: 'monthly', category: 'Luz', paid_by: 'Inquilino', last_reviewed: '2020-01-01' };
   const agua = { id: 'a', status: 'active', price: 30, billing_period: 'monthly', category: 'Agua' };
   const s = summarize({
     contracts: [luz, agua],
     expenses: [
-      { recurring: true, amount: 90, period: 'quarterly', date: '2026-01-01', category: 'Comunidad', paid_by: 'tenant' },
-      { recurring: false, amount: 500, date: '2026-05-10', category: 'Mantenimiento', paid_by: 'tenant' },
+      { recurring: true, amount: 90, period: 'quarterly', date: '2026-01-01', category: 'Comunidad', paid_by: 'Inquilino' },
+      { recurring: false, amount: 500, date: '2026-05-10', category: 'Mantenimiento', paid_by: 'Inquilino' },
       { recurring: false, amount: 100, date: '2026-05-10', category: 'Mantenimiento' },
     ],
     incomes: [{ recurring: true, amount: 650, period: 'monthly', date: '2026-01-01' }],
@@ -113,7 +116,7 @@ t('lo que paga el inquilino no cuenta como gasto mío', () => {
   assert.equal(Math.round(s.monthlyNow), 30);
   assert.equal(Math.round(s.net), 7340);             // 7800 - 460
   assert.equal(contractAnnual(luz), 0);
-  assert.equal(needsReview(luz, today), false);      // no hay que buscar mejor precio de algo que no pagas
+  assert.equal(needsReview(luz, today), true);       // aunque no lo pagues, te avisa de revisarlo
   assert.equal(savingFor(luz, [{ contract_id: 'l', price: 10, billing_period: 'monthly' }]), null);
   assert.equal(totalPotentialSaving([luz], [{ contract_id: 'l', price: 10, billing_period: 'monthly' }]), 0);
   // los avisos de renovación siguen funcionando

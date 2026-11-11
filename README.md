@@ -17,7 +17,7 @@ PWA para controlar contratos, suministros, suscripciones, gastos e ingresos por 
 
 Si ya tenías la base de datos creada, ejecuta en el SQL Editor los archivos de `migrations/` que falten, en orden. `schema.sql` ya los incluye para instalaciones nuevas.
 
-- `001_paid_by.sql`: campo "Quién lo paga" (yo / inquilino) en contratos y gastos.
+- `001_paid_by.sql`: campo "Lo paga otra persona" (texto libre) en contratos y gastos.
 
 ## Estructura
 
