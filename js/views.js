@@ -1,7 +1,7 @@
 // Pantallas de la app. Cada vista devuelve un elemento DOM.
 import {
   summarize, contractAlerts, needsReview, savingFor, totalPotentialSaving, contractAnnual, toAnnual,
-  toMonthly, parseDate, toISO, isActive, MONTHS, ALERT_KINDS, PERIODS, toCSV,
+  toMonthly, parseDate, toISO, isActive, paidByMe, MONTHS, ALERT_KINDS, PERIODS, toCSV,
 } from './calc.js';
 import {
   store, scoped, byId, update, deleteDocument, openDocument, sb,
@@ -20,6 +20,7 @@ const perShort = (p) => PER_SHORT[p] || '/mes';
 const typeLabel = (t) => PROPERTY_TYPES.find((x) => x.value === t)?.label || 'Otra';
 const go = (hash) => () => { location.hash = hash; };
 const link = (href, ...kids) => h('a', { href, class: 'link' }, ...kids);
+const TENANT_TAG = 'Lo paga el inquilino';
 const KIND_ICON = { contrato: '📑', factura: '🧾', poliza: '🛡️', escritura: '🏠', certificado: '📜', otro: '📎' };
 
 // ---------- Helpers ----------
@@ -144,7 +145,7 @@ export function dashboardView() {
 
   if (store.filter === 'all') root.append(card('Por propiedad', propertyTable(s.year)));
 
-  const top = contracts.filter(isActive).sort((a, b) => contractAnnual(b) - contractAnnual(a)).slice(0, 6);
+  const top = contracts.filter((c) => isActive(c) && paidByMe(c)).sort((a, b) => contractAnnual(b) - contractAnnual(a)).slice(0, 6);
   if (top.length) {
     root.append(card('Contratos que más cuestan', h('ul', { class: 'list' }, top.map((c) =>
       h('li', { class: 'row' },
@@ -189,7 +190,7 @@ export function contractsView() {
       groups.get(k).push(c);
     }
     for (const [k, items] of [...groups].sort((a, b) => propName(a[0] === 'personal' ? null : a[0]).localeCompare(propName(b[0] === 'personal' ? null : b[0]), 'es'))) {
-      const monthly = items.filter(isActive).reduce((sum, c) => sum + toMonthly(c.price, c.billing_period), 0);
+      const monthly = items.filter((c) => isActive(c) && paidByMe(c)).reduce((sum, c) => sum + toMonthly(c.price, c.billing_period), 0);
       if (store.filter === 'all') {
         host.append(h('div', { class: 'group-head' }, propChip(k === 'personal' ? null : k), h('small', {}, `${eur0(monthly)}/mes`)));
       }
@@ -203,6 +204,7 @@ export function contractsView() {
           h('div', { class: 'price' }, eur(c.price), h('small', {}, ` ${perShort(c.billing_period)}`)),
           h('div', { class: 'badges' },
             isActive(c) ? null : h('span', { class: 'badge muted' }, 'Dado de baja'),
+            paidByMe(c) ? null : h('span', { class: 'badge muted' }, TENANT_TAG),
             al && al.days <= 120 ? alertBadge(al) : null,
             needsReview(c, today) ? h('span', { class: 'badge soon' }, 'Revisar') : null,
             sv && sv.saving > 0 ? h('span', { class: 'badge good' }, `Ahorro ${eur0(sv.saving)}/año`) : null));
@@ -239,6 +241,7 @@ export function contractDetailView(id) {
     h('div', { class: 'grow' },
       h('h2', {}, c.provider), h('p', { class: 'muted' }, [c.name, c.category].filter(Boolean).join(' · ')),
       h('div', { class: 'badges' }, propChip(c.property_id), isActive(c) ? null : h('span', { class: 'badge muted' }, 'Dado de baja'),
+        paidByMe(c) ? null : h('span', { class: 'badge muted' }, TENANT_TAG),
         alerts.map(alertBadge))),
     h('div', { class: 'row-actions' },
       btn('Editar', () => contractForm(c)),
@@ -257,7 +260,7 @@ export function contractDetailView(id) {
       infoItem('Nº contrato / CUPS / póliza', c.contract_number), infoItem('Titular', c.holder),
       infoItem('Alta', c.start_date && fmtDate(c.start_date)), infoItem('Próxima renovación', c.renewal_date && fmtDate(c.renewal_date)),
       infoItem('Fin de permanencia', c.permanence_end && fmtDate(c.permanence_end)), infoItem('Fin de contrato', c.end_date && fmtDate(c.end_date)),
-      infoItem('Aviso previo', `${c.notice_days ?? 30} días`), infoItem('Renovación automática', c.auto_renew ? 'Sí' : 'No')),
+      infoItem('Quién lo paga', paidByMe(c) ? 'Yo' : 'El inquilino'), infoItem('Aviso previo', `${c.notice_days ?? 30} días`), infoItem('Renovación automática', c.auto_renew ? 'Sí' : 'No')),
     c.notes ? h('p', { class: 'notes' }, c.notes) : null,
     h('div', { class: 'row-actions pad' }, btn('✔ Marcar como revisado hoy', async () => {
       try { await update('contracts', c.id, { last_reviewed: toISO(new Date()) }); toast('Marcado como revisado'); bus.rerender(); } catch (e) { toast(errMsg(e), 'error'); }
@@ -266,7 +269,7 @@ export function contractDetailView(id) {
   // Ofertas
   const offers = store.data.offers.filter((o) => o.contract_id === c.id)
     .sort((a, b) => toAnnual(a.price, a.billing_period) - toAnnual(b.price, b.billing_period));
-  const cur = contractAnnual(c);
+  const cur = toAnnual(c.price, c.billing_period);
   root.append(card('Comparador de ofertas', offers.length
     ? h('ul', { class: 'list' }, offers.map((o) => {
       const diff = cur - toAnnual(o.price, o.billing_period);
@@ -363,19 +366,19 @@ export function expensesView() {
 
   if (eState.tab === 'recurring') {
     const list = all.filter((e) => e.recurring).sort((a, b) => b.amount * 12 / PERIODS[b.period].months - a.amount * 12 / PERIODS[a.period].months);
-    const monthly = list.filter((e) => { const end = parseDate(e.end_date); return !end || end >= new Date(); }).reduce((s, e) => s + toMonthly(e.amount, e.period), 0);
+    const monthly = list.filter((e) => { const end = parseDate(e.end_date); return paidByMe(e) && (!end || end >= new Date()); }).reduce((s, e) => s + toMonthly(e.amount, e.period), 0);
     root.append(h('div', { class: 'kpis' }, kpi('Recurrentes al mes', eur0(monthly)), kpi('Recurrentes al año', eur0(monthly * 12))));
     root.append(list.length ? h('ul', { class: 'list card' }, list.map((e) => moneyRow({
-      icon: catIcon(e.category), title: e.concept, sub: `${e.category} · desde ${fmtDate(e.date)}${e.end_date ? ' hasta ' + fmtDate(e.end_date) : ''}`,
+      icon: catIcon(e.category), title: e.concept, sub: `${e.category} · desde ${fmtDate(e.date)}${e.end_date ? ' hasta ' + fmtDate(e.end_date) : ''}${paidByMe(e) ? '' : ' · ' + TENANT_TAG}`,
       amount: eur(e.amount), small: periodLabel(e.period).toLowerCase(), onClick: () => expenseForm(e), chip: propChip(e.property_id),
     }))) : empty('No hay gastos recurrentes (comunidad, IBI, hipoteca…).', btn('+ Añadir', () => expenseForm(), 'primary')));
   } else {
     const yearSel = h('select', { onchange: (e) => { eState.year = Number(e.target.value); bus.rerender(); } },
       years.map((y) => h('option', { value: y, selected: y === eState.year }, y)));
     const list = all.filter((e) => !e.recurring && parseDate(e.date)?.getFullYear() === eState.year).sort((a, b) => b.date.localeCompare(a.date));
-    root.append(h('div', { class: 'toolbar' }, yearSel, h('strong', {}, `Total ${eState.year}: ${eur(list.reduce((s, e) => s + Number(e.amount), 0))}`)));
+    root.append(h('div', { class: 'toolbar' }, yearSel, h('strong', {}, `Total ${eState.year}: ${eur(list.filter(paidByMe).reduce((s, e) => s + Number(e.amount), 0))}`)));
     root.append(list.length ? h('ul', { class: 'list card' }, list.map((e) => moneyRow({
-      icon: catIcon(e.category), title: e.concept, sub: `${e.category} · ${fmtDate(e.date)}`, amount: eur(e.amount),
+      icon: catIcon(e.category), title: e.concept, sub: `${e.category} · ${fmtDate(e.date)}${paidByMe(e) ? '' : ' · ' + TENANT_TAG}`, amount: eur(e.amount),
       onClick: () => expenseForm(e), chip: propChip(e.property_id),
     }))) : empty('Sin gastos puntuales este año (reparaciones, derramas, mobiliario…).', btn('+ Añadir', () => expenseForm(), 'primary')));
   }
@@ -447,7 +450,7 @@ export function propertyDetailView(id) {
   const addHere = () => contractForm(null, { property_id: isPersonal ? '' : id });
   root.append(card('Contratos y suministros', act.length
     ? h('ul', { class: 'list' }, act.map((c) => h('li', { class: 'row' }, h('span', { class: 'big-icon sm' }, catIcon(c.category)),
-      h('div', { class: 'grow' }, link(`#/contrato/${c.id}`, h('strong', {}, c.provider)), h('small', {}, c.name || c.category)),
+      h('div', { class: 'grow' }, link(`#/contrato/${c.id}`, h('strong', {}, c.provider)), h('small', {}, [c.name || c.category, paidByMe(c) ? null : TENANT_TAG].filter(Boolean).join(' · '))),
       h('div', { class: 'amount' }, h('b', {}, eur(c.price)), h('small', {}, perShort(c.billing_period))))))
     : h('p', { class: 'muted' }, 'Sin contratos todavía.'), btn('+ Contrato', addHere, 'sm')));
 
@@ -456,7 +459,7 @@ export function propertyDetailView(id) {
   const ex = d.expenses.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const inc = d.incomes.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   root.append(h('div', { class: 'two' },
-    card('Gastos', ex.length ? h('ul', { class: 'list' }, ex.map((e) => moneyRow({ icon: catIcon(e.category), title: e.concept, sub: e.recurring ? 'Recurrente' : fmtDate(e.date), amount: eur(e.amount), small: e.recurring ? periodLabel(e.period).toLowerCase() : '', onClick: () => expenseForm(e) }))) : h('p', { class: 'muted' }, 'Sin gastos.'),
+    card('Gastos', ex.length ? h('ul', { class: 'list' }, ex.map((e) => moneyRow({ icon: catIcon(e.category), title: e.concept, sub: [e.recurring ? 'Recurrente' : fmtDate(e.date), paidByMe(e) ? null : TENANT_TAG].filter(Boolean).join(' · '), amount: eur(e.amount), small: e.recurring ? periodLabel(e.period).toLowerCase() : '', onClick: () => expenseForm(e) }))) : h('p', { class: 'muted' }, 'Sin gastos.'),
       h('div', { class: 'row-actions' }, link('#/gastos', 'Ver todos'))),
     card('Ingresos', inc.length ? h('ul', { class: 'list' }, inc.map((i) => moneyRow({ icon: '💶', title: i.concept, sub: i.tenant || (i.recurring ? 'Recurrente' : fmtDate(i.date)), amount: eur(i.amount), small: i.recurring ? periodLabel(i.period).toLowerCase() : '', onClick: () => incomeForm(i) }))) : h('p', { class: 'muted' }, 'Sin ingresos.'),
       h('div', { class: 'row-actions' }, link('#/ingresos', 'Ver todos')))));
@@ -505,13 +508,15 @@ export function settingsView() {
       { label: 'Propiedad', get: (c) => propName(c.property_id) }, { label: 'Categoría', key: 'category' }, { label: 'Compañía', key: 'provider' },
       { label: 'Tarifa', key: 'name' }, { label: 'Nº contrato', key: 'contract_number' }, { label: 'Titular', key: 'holder' },
       { label: 'Importe', key: 'price' }, { label: 'Periodicidad', get: (c) => per(c.billing_period) },
-      { label: 'Coste anual', get: (c) => contractAnnual(c).toFixed(2) }, { label: 'Alta', key: 'start_date' },
+      { label: 'Lo paga', get: (c) => (paidByMe(c) ? 'Yo' : 'Inquilino') },
+      { label: 'Coste anual del contrato', get: (c) => (isActive(c) ? toAnnual(c.price, c.billing_period) : 0).toFixed(2) }, { label: 'Alta', key: 'start_date' },
       { label: 'Renovación', key: 'renewal_date' }, { label: 'Fin permanencia', key: 'permanence_end' }, { label: 'Fin contrato', key: 'end_date' },
       { label: 'Penalización', key: 'penalty' }, { label: 'Estado', get: (c) => (isActive(c) ? 'Activo' : 'Baja') }, { label: 'Notas', key: 'notes' },
     ], store.data.contracts)),
     btn('Gastos (CSV)', dl('gastos', [
       { label: 'Propiedad', get: (e) => propName(e.property_id) }, { label: 'Concepto', key: 'concept' }, { label: 'Categoría', key: 'category' },
-      { label: 'Importe', key: 'amount' }, { label: 'Fecha', key: 'date' }, { label: 'Recurrente', get: (e) => (e.recurring ? 'Sí' : 'No') },
+      { label: 'Importe', key: 'amount' }, { label: 'Lo paga', get: (e) => (paidByMe(e) ? 'Yo' : 'Inquilino') },
+      { label: 'Fecha', key: 'date' }, { label: 'Recurrente', get: (e) => (e.recurring ? 'Sí' : 'No') },
       { label: 'Periodicidad', get: (e) => (e.recurring ? per(e.period) : '') }, { label: 'Hasta', key: 'end_date' },
     ], store.data.expenses)),
     btn('Ingresos (CSV)', dl('ingresos', [

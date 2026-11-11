@@ -18,6 +18,12 @@ export const PROPERTY_TYPES = [
   { value: 'otra', label: 'Otra' },
 ];
 
+export const PAID_BY_OPTIONS = [
+  { value: 'me', label: 'Yo' },
+  { value: 'tenant', label: 'El inquilino' },
+];
+const PAID_BY_HINT = 'Si lo paga el inquilino, no cuenta en tus gastos ni en tu neto.';
+
 export const DOC_KINDS = [
   { value: 'contrato', label: 'Contrato' },
   { value: 'factura', label: 'Factura' },
@@ -68,6 +74,7 @@ export function contractForm(c, defaults = {}) {
       { name: 'name', label: 'Tarifa / nombre', placeholder: 'Tarifa 2.0TD, Fibra 600…' },
       { name: 'contract_number', label: 'Nº contrato / CUPS / póliza', half: true },
       { name: 'holder', label: 'Titular', half: true },
+      { name: 'paid_by', label: 'Quién lo paga', type: 'select', options: PAID_BY_OPTIONS, default: 'me', hint: PAID_BY_HINT },
       { name: 'price', label: 'Importe (€)', type: 'number', step: '0.01', required: true, half: true },
       { name: 'billing_period', label: 'Periodicidad', type: 'select', options: periodOptions(), half: true },
       { name: 'start_date', label: 'Fecha de alta', type: 'date', half: true },
@@ -144,6 +151,7 @@ export function expenseForm(e) {
       { name: 'category', label: 'Categoría', type: 'select', options: categoryOptions(e?.category), half: true },
       { name: 'property_id', label: 'Propiedad', type: 'select', options: propertyOptions(), half: true },
       { name: 'contract_id', label: 'Contrato relacionado', type: 'select', options: contractOptions(), half: true },
+      { name: 'paid_by', label: 'Quién lo paga', type: 'select', options: PAID_BY_OPTIONS, default: 'me', hint: PAID_BY_HINT },
       { name: 'date', label: 'Fecha (o inicio si es recurrente)', type: 'date', required: true, half: true },
       { name: 'recurring', label: 'Es un gasto recurrente', type: 'checkbox' },
       { name: 'period', label: 'Se repite cada', type: 'select', options: periodOptions(), half: true },

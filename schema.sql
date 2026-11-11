@@ -37,6 +37,7 @@ create table if not exists public.contracts (
   name             text,
   contract_number  text,
   holder           text,
+  paid_by          text not null default 'me' check (paid_by in ('me', 'tenant')), -- me | tenant
   price            numeric not null default 0,
   billing_period   text not null default 'monthly', -- monthly | bimonthly | quarterly | semiannual | annual
   start_date       date,
@@ -70,6 +71,7 @@ create table if not exists public.expenses (
   concept      text not null,
   category     text not null default 'Otros',
   amount       numeric not null default 0,
+  paid_by      text not null default 'me' check (paid_by in ('me', 'tenant')), -- me | tenant
   date         date not null default current_date,
   recurring    boolean not null default false,
   period       text not null default 'monthly',
@@ -119,6 +121,10 @@ create table if not exists public.documents (
   mime_type    text,
   created_at   timestamptz not null default now()
 );
+
+-- ---------- Actualizaciones para bases de datos ya creadas ----------
+alter table public.contracts add column if not exists paid_by text not null default 'me' check (paid_by in ('me', 'tenant'));
+alter table public.expenses  add column if not exists paid_by text not null default 'me' check (paid_by in ('me', 'tenant'));
 
 -- ---------- Índices ----------
 create index if not exists idx_contracts_property   on public.contracts(property_id);

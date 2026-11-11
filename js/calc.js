@@ -46,7 +46,10 @@ export function daysUntil(s, today = new Date()) {
 
 export const isActive = (c) => c.status !== 'cancelled';
 
-export const contractMonthly = (c) => (isActive(c) ? toMonthly(c.price, c.billing_period) : 0);
+// ¿Lo pago yo? Lo que paga otra persona (p. ej. el inquilino) no cuenta como gasto mío.
+export const paidByMe = (x) => x.paid_by !== 'tenant';
+
+export const contractMonthly = (c) => (isActive(c) && paidByMe(c) ? toMonthly(c.price, c.billing_period) : 0);
 export const contractAnnual = (c) => contractMonthly(c) * 12;
 
 export function contractAlerts(contracts, today = new Date(), horizonDays = 120) {
@@ -66,7 +69,7 @@ export function contractAlerts(contracts, today = new Date(), horizonDays = 120)
 
 // Contratos activos que llevan más de `months` meses sin revisarse.
 export function needsReview(c, today = new Date(), months = 12) {
-  if (!isActive(c)) return false;
+  if (!isActive(c) || !paidByMe(c)) return false;
   const ref = c.last_reviewed || c.start_date || (c.created_at ? c.created_at.slice(0, 10) : null);
   const days = daysUntil(ref, today);
   if (days === null) return false;
@@ -75,7 +78,7 @@ export function needsReview(c, today = new Date(), months = 12) {
 
 export function savingFor(contract, offers) {
   const mine = offers.filter((o) => o.contract_id === contract.id);
-  if (!mine.length || !isActive(contract)) return null;
+  if (!mine.length || !isActive(contract) || !paidByMe(contract)) return null;
   const best = mine.reduce((a, b) =>
     toAnnual(a.price, a.billing_period) <= toAnnual(b.price, b.billing_period) ? a : b);
   const saving = contractAnnual(contract) - toAnnual(best.price, best.billing_period);
@@ -128,7 +131,7 @@ export function summarize({ contracts = [], expenses = [], incomes = [] }, today
   let incomeMonthlyNow = 0;
 
   for (const c of contracts) {
-    if (!isActive(c)) continue;
+    if (!isActive(c) || !paidByMe(c)) continue;
     const m = toMonthly(c.price, c.billing_period);
     monthlyNow += m;
     for (let i = 0; i < 12; i++) byMonth[i].expense += m;
@@ -136,6 +139,7 @@ export function summarize({ contracts = [], expenses = [], incomes = [] }, today
   }
 
   for (const e of expenses) {
+    if (!paidByMe(e)) continue;
     const amount = Number(e.amount) || 0;
     if (e.recurring) {
       const m = toMonthly(amount, e.period);

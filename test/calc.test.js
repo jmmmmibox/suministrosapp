@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   toMonthly, toAnnual, daysUntil, contractAlerts, needsReview,
-  savingFor, totalPotentialSaving, summarize, toCSV, parseDate,
+  savingFor, totalPotentialSaving, summarize, toCSV, parseDate, paidByMe, contractAnnual,
 } from '../js/calc.js';
 
 const today = new Date(2026, 10, 10); // 10-nov-2026
@@ -92,6 +92,32 @@ t('recurrente con fecha fin', () => {
 t('CSV', () => {
   const csv = toCSV([{ a: 'x;y', b: 'say "hi"' }], [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }]);
   assert.equal(csv, '﻿A;B\r\n"x;y";"say ""hi"""');
+});
+
+t('lo que paga el inquilino no cuenta como gasto mío', () => {
+  assert.equal(paidByMe({}), true);
+  assert.equal(paidByMe({ paid_by: 'me' }), true);
+  assert.equal(paidByMe({ paid_by: 'tenant' }), false);
+  const luz = { id: 'l', status: 'active', price: 80, billing_period: 'monthly', category: 'Luz', paid_by: 'tenant', last_reviewed: '2020-01-01' };
+  const agua = { id: 'a', status: 'active', price: 30, billing_period: 'monthly', category: 'Agua' };
+  const s = summarize({
+    contracts: [luz, agua],
+    expenses: [
+      { recurring: true, amount: 90, period: 'quarterly', date: '2026-01-01', category: 'Comunidad', paid_by: 'tenant' },
+      { recurring: false, amount: 500, date: '2026-05-10', category: 'Mantenimiento', paid_by: 'tenant' },
+      { recurring: false, amount: 100, date: '2026-05-10', category: 'Mantenimiento' },
+    ],
+    incomes: [{ recurring: true, amount: 650, period: 'monthly', date: '2026-01-01' }],
+  }, today);
+  assert.equal(Math.round(s.annualExpenses), 460);   // 30*12 + 100
+  assert.equal(Math.round(s.monthlyNow), 30);
+  assert.equal(Math.round(s.net), 7340);             // 7800 - 460
+  assert.equal(contractAnnual(luz), 0);
+  assert.equal(needsReview(luz, today), false);      // no hay que buscar mejor precio de algo que no pagas
+  assert.equal(savingFor(luz, [{ contract_id: 'l', price: 10, billing_period: 'monthly' }]), null);
+  assert.equal(totalPotentialSaving([luz], [{ contract_id: 'l', price: 10, billing_period: 'monthly' }]), 0);
+  // los avisos de renovación siguen funcionando
+  assert.equal(contractAlerts([{ ...luz, renewal_date: '2026-11-20' }], today).length, 1);
 });
 
 console.log(`\n${n} grupos de pruebas OK`);

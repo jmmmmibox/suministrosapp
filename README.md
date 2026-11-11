@@ -13,6 +13,12 @@ PWA para controlar contratos, suministros, suscripciones, gastos e ingresos por 
 4. **Probar en local:** `npx serve .` (o cualquier servidor estático) y abre `http://localhost:3000`.
 5. **Desplegar:** Netlify → *Add new site* → importa el repo de GitHub (sin comando de build, directorio `.`).
 
+## Migraciones
+
+Si ya tenías la base de datos creada, ejecuta en el SQL Editor los archivos de `migrations/` que falten, en orden. `schema.sql` ya los incluye para instalaciones nuevas.
+
+- `001_paid_by.sql`: campo "Quién lo paga" (yo / inquilino) en contratos y gastos.
+
 ## Estructura
 
 | Ruta | Contenido |
